@@ -79,7 +79,7 @@ async def _run_pipeline() -> list[ScoredVault]:
     async with httpx.AsyncClient() as client:
         vaults = await scan_vaults(client)
     risks = collect_risks(vaults)
-    scored = score_vaults(vaults, risks, use_ml=False)
+    scored = score_vaults(vaults, risks, use_ml=True)
 
     # Persist history and flag drops
     init_db(_DB_PATH)
