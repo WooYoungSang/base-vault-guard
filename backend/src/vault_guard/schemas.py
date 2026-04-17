@@ -35,6 +35,8 @@ class ScoredVaultSchema(BaseModel):
     risk: RiskProfileSchema
     score: float
     grade: str
+    scoring_method: str = "rule_based"
+    ml_confidence: float | None = None
     disclaimer: str = Field(default=DISCLAIMER)
 
 

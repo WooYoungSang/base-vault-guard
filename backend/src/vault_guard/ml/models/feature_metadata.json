@@ -1,0 +1,31 @@
+{
+  "feature_names": [
+    "utilization",
+    "tvl_change_7d",
+    "oracle_risk_score",
+    "audit_score",
+    "drawdown_max",
+    "utilization_squared",
+    "risk_composite"
+  ],
+  "grade_labels": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "F"
+  ],
+  "n_training_samples": 2003,
+  "n_test_samples": 501,
+  "accuracy": 0.8942115768463074,
+  "macro_auc": 0.9906696388426195,
+  "feature_importance": {
+    "utilization": 1.0994257926940918,
+    "tvl_change_7d": 0.6949512362480164,
+    "oracle_risk_score": 1.2347395420074463,
+    "audit_score": 2.994279146194458,
+    "drawdown_max": 1.5089830160140991,
+    "utilization_squared": 0.9597450494766235,
+    "risk_composite": 11.097314834594727
+  }
+}

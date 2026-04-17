@@ -37,6 +37,9 @@ _WEIGHTS = {
     "drawdown_max":      0.15,   # historical drawdown
 }
 
+# Minimum ML confidence to trust the model prediction
+_ML_CONFIDENCE_THRESHOLD = 0.6
+
 
 def _score_to_grade(score: float) -> SafetyGrade:
     for threshold, grade in _GRADE_THRESHOLDS:
@@ -79,75 +82,73 @@ def rule_based_score(risk: RiskProfile) -> float:
 
 
 # ---------------------------------------------------------------------------
-# XGBoost scorer (optional — falls back to rule-based if unavailable)
+# MLScorer singleton (lazy-loaded, thread-safe)
 # ---------------------------------------------------------------------------
 
-_xgb_model = None   # lazy-loaded
+_ml_scorer = None  # lazy-loaded
 
 
-def _features(risk: RiskProfile) -> list[float]:
-    return [
-        risk.utilization,
-        risk.tvl_change_7d,
-        risk.oracle_risk_score,
-        risk.audit_score,
-        risk.drawdown_max,
-    ]
-
-
-def _try_load_xgb_model(model_path: str = "models/vault_guard_xgb.json") -> object | None:
+def _get_ml_scorer(model_path: str | None = None):
+    """Lazily load the MLScorer singleton."""
+    global _ml_scorer  # noqa: PLW0603
+    if _ml_scorer is not None:
+        return _ml_scorer
     try:
-        import xgboost as xgb  # noqa: PLC0415
+        from vault_guard.ml.ml_scorer import MLScorer  # noqa: PLC0415
 
-        booster = xgb.Booster()
-        booster.load_model(model_path)
-        logger.info("XGBoost model loaded from %s", model_path)
-        return booster
+        _ml_scorer = MLScorer(model_path=model_path)
+        if not _ml_scorer.available:
+            _ml_scorer = None
     except Exception as exc:
-        logger.info("XGBoost model not available (%s); using rule-based scorer", exc)
-        return None
-
-
-def _xgb_score(risk: RiskProfile, model: object) -> float:
-    """Score using loaded XGBoost model. Returns 0–100."""
-    try:
-        import xgboost as xgb  # noqa: PLC0415
-
-        feats = np.array([_features(risk)], dtype=np.float32)
-        dmatrix = xgb.DMatrix(feats, feature_names=list(_WEIGHTS.keys()))
-        prob = float(model.predict(dmatrix)[0])  # P(safe)
-        return round(prob * 100.0, 2)
-    except Exception as exc:
-        logger.warning("XGBoost inference failed (%s); falling back to rule-based", exc)
-        return rule_based_score(risk)
+        logger.info("MLScorer not available (%s); using rule-based scorer", exc)
+        _ml_scorer = None
+    return _ml_scorer
 
 
 def score_vault(
     vault: VaultInfo,
     risk: RiskProfile,
     *,
-    model_path: str = "models/vault_guard_xgb.json",
+    model_path: str | None = None,
     use_ml: bool = True,
 ) -> ScoredVault:
     """
     Score a vault and return a ScoredVault with numeric score and letter grade.
 
     If the vault has insufficient data, grade is set to UNRATED.
+    ML prediction is tried first; falls back to rule-based if confidence < 0.6
+    or model is unavailable.
     """
     if not risk.sufficient_data:
-        return ScoredVault(vault=vault, risk=risk, score=0.0, grade=SafetyGrade.UNRATED)
+        return ScoredVault(
+            vault=vault, risk=risk, score=0.0, grade=SafetyGrade.UNRATED,
+            scoring_method="rule_based", ml_confidence=None,
+        )
 
-    global _xgb_model  # noqa: PLW0603
-    if use_ml and _xgb_model is None:
-        _xgb_model = _try_load_xgb_model(model_path)
+    # Try ML scoring
+    if use_ml:
+        scorer = _get_ml_scorer(model_path)
+        if scorer is not None:
+            prediction = scorer.predict(risk)
+            if prediction is not None and prediction.confidence >= _ML_CONFIDENCE_THRESHOLD:
+                # Use ML-derived grade; compute rule-based score for the numeric value
+                rb_score = rule_based_score(risk)
+                return ScoredVault(
+                    vault=vault,
+                    risk=risk,
+                    score=rb_score,
+                    grade=prediction.grade,
+                    scoring_method="ml",
+                    ml_confidence=round(prediction.confidence, 4),
+                )
 
-    if use_ml and _xgb_model is not None:
-        score = _xgb_score(risk, _xgb_model)
-    else:
-        score = rule_based_score(risk)
-
+    # Fallback to rule-based
+    score = rule_based_score(risk)
     grade = _score_to_grade(score)
-    return ScoredVault(vault=vault, risk=risk, score=score, grade=grade)
+    return ScoredVault(
+        vault=vault, risk=risk, score=score, grade=grade,
+        scoring_method="rule_based", ml_confidence=None,
+    )
 
 
 def score_vaults(

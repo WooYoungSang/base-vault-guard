@@ -41,3 +41,5 @@ class ScoredVault:
     risk: RiskProfile
     score: float        # 0–100
     grade: SafetyGrade
+    scoring_method: str = "rule_based"   # "ml" | "rule_based"
+    ml_confidence: float | None = None

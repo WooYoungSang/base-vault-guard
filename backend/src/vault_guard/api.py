@@ -68,6 +68,8 @@ def _to_schema(sv: ScoredVault) -> ScoredVaultSchema:
         ),
         score=sv.score,
         grade=sv.grade.value,
+        scoring_method=sv.scoring_method,
+        ml_confidence=sv.ml_confidence,
     )
 
 
