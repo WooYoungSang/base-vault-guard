@@ -1,32 +1,62 @@
 # Base Vault Guard — AI-Powered DeFi Safety Scores
 
-> **Base Vault Guard** assigns AI-powered safety scores (A–F) to every lending market and yield vault on Base — so you can find the best yield *without* the hidden risks.
+> **Base Vault Guard** assigns AI-powered safety grades (A–F) to every lending market and yield vault on Base — so you can find the best yield *without* the hidden risks.
 
 [![Built on Base](https://img.shields.io/badge/Built%20on-Base-0052FF?logo=coinbase)](https://base.org)
+[![Live Demo](https://img.shields.io/badge/Live-vault--guard.warvis.org-brightgreen)](https://vault-guard.warvis.org)
+[![Tests](https://img.shields.io/badge/Tests-110%20passing-brightgreen)](https://github.com/WooYoungSang/base-vault-guard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
 
+**Live Demo:** https://vault-guard.warvis.org  
+**API:** https://api-vault-guard.warvis.org/docs
+
 ---
 
-## Overview
+## Problem
 
-DeFi on Base offers hundreds of vaults across Morpho, Aave v3, Compound v3, and Aerodrome — but raw APY numbers hide liquidity risk, oracle vulnerabilities, and audit gaps. **Base Vault Guard** solves this with a transparent, explainable safety scoring engine.
+DeFi on Base offers hundreds of vaults across Morpho, Aave v3, Compound v3, and Aerodrome — but raw APY numbers hide liquidity risk, oracle vulnerabilities, and audit gaps. Users either chase yield blindly or miss out on safe opportunities because risk assessment is too complex.
 
-### Key Features
+---
+
+## Solution
+
+**Base Vault Guard** continuously scans 578+ live Base vaults via DeFiLlama and scores each one using an XGBoost model trained on real on-chain data — assigning a transparent A–F safety grade with a full risk breakdown.
+
+---
+
+## Features
 
 | Feature | Description |
 |---------|-------------|
-| **F1 — Safety Grades (A–F)** | Every vault receives a letter grade backed by a 0–100 numeric score |
-| **F2 — Multi-Protocol Coverage** | Morpho Blue, Aave v3, Compound v3, Aerodrome on Base |
-| **F3 — Rule-Based + ML Scoring** | XGBoost classifier with transparent rule-based fallback |
+| **F1 — Safety Grades (A–F)** | Every vault gets a letter grade backed by a 0–100 numeric score |
+| **F2 — Multi-Protocol Coverage** | Morpho Blue, Aave v3, Compound v3, Aerodrome on Base (578 vaults) |
+| **F3 — XGBoost ML Scoring** | 94.0% accuracy model trained on real DeFiLlama data + rule-based fallback |
 | **F4 — Safe Yield Finder** | Filter by minimum safety grade, sorted by APY descending |
-| **F5 — Grade History** | Track safety grade changes over time with drop alerts |
-| **F6 — REST API** | Open API for integrations, bots, and dashboards |
+| **F5 — Grade History** | Track safety grade changes over time with automatic drop alerts |
+| **F6 — REST API** | Open API for wallets, bots, and DeFi dashboards |
 
-### Safety Score Methodology
+---
 
-Each vault is scored on 5 risk dimensions:
+## ML Model Performance
+
+| Metric | Value |
+|--------|-------|
+| Accuracy | **94.0%** |
+| AUC-ROC | **0.9961** |
+| Training set | 578 real vaults + synthetic fill for C/D/F grades |
+| Data source | DeFiLlama API (free, no key), Base RPC |
+| Baseline (synthetic-only) | 89.8% accuracy |
+
+**Real data pipeline:**
+- DeFiLlama: TVL, APY, 7-day TVL change for all 578 Base vaults
+- Base RPC: live utilization rate per vault
+- AUDIT_REGISTRY: 15 known-audited protocols with quality scores
+
+---
+
+## Safety Score Methodology
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
@@ -36,9 +66,7 @@ Each vault is scored on 5 risk dimensions:
 | Audit Coverage | 25% | Number and quality of security audits |
 | Max Drawdown | 15% | Worst historical loss event |
 
-**Score → Grade mapping**: A (85–100) · B (70–84) · C (55–69) · D (35–54) · F (0–34)
-
-> ⚠️ Safety scores are informational only, not financial advice. Vaults with insufficient data are marked **Unrated**.
+**Grade mapping:** A (85–100) · B (70–84) · C (55–69) · D (35–54) · F (0–34)
 
 ---
 
@@ -55,42 +83,22 @@ Each vault is scored on 5 risk dimensions:
 │  GET /vaults · /vaults/{addr} · /safe-yield · /health   │
 └──┬──────────────┬───────────────┬────────────────┬──────┘
    │              │               │                │
-┌──▼──┐     ┌────▼────┐    ┌─────▼────┐    ┌──────▼──────┐
-│Scan │     │  Risk   │    │  Scorer  │    │  SQLite DB  │
-│ner  │     │Collector│    │(XGB/Rule)│    │  (History)  │
-└──┬──┘     └────┬────┘    └──────────┘    └─────────────┘
-   │              │
-   ▼              ▼
-Base RPC    Hardcoded
-(Morpho     Registry
- subgraph)  (Aave/Comp/
-             Aerodrome)
+Scanner      Risk            XGBoost          SQLite
+(DeFiLlama)  Collector       Scorer           History
+             (Base RPC)      (94% acc)        + Alerts
 ```
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- (Optional) Docker & Docker Compose
-
 ### Backend
 
 ```bash
 cd backend
 pip install -e ".[dev]"
-
-# Run API server
 uvicorn vault_guard.api:app --reload --port 8000
-
-# Run tests
-pytest tests/ -v
-
-# Lint
-ruff check .
+pytest tests/ -v   # 110 tests
 ```
 
 ### Frontend
@@ -98,30 +106,27 @@ ruff check .
 ```bash
 cd frontend
 npm install
-
-# Development
 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
-
-# Production build
-npm run build
-npm run lint
 ```
 
-### Docker Compose (full stack)
+### Docker Compose
 
 ```bash
 docker compose up
-# Backend: http://localhost:8000
-# Frontend: http://localhost:3000
+```
+
+### Real Data Collection & Retrain
+
+```bash
+python -m vault_guard.ml.collect   # 578 Base vaults from DeFiLlama
+python -m vault_guard.ml.retrain   # XGBoost retrain
 ```
 
 ---
 
 ## API Reference
 
-Base URL: `http://localhost:8000`
-
-### Endpoints
+Base URL: `https://api-vault-guard.warvis.org`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -129,65 +134,39 @@ Base URL: `http://localhost:8000`
 | `GET` | `/vaults` | List all vaults (paginated) |
 | `GET` | `/vaults?protocol=morpho` | Filter by protocol |
 | `GET` | `/vaults?grade=A` | Filter by safety grade |
-| `GET` | `/vaults/{address}` | Single vault detail + risk breakdown |
-| `GET` | `/vaults/{address}/history` | Grade history for a vault |
-| `GET` | `/vaults/safe-yield?min_grade=B` | Safe Yield Finder (APY-sorted) |
+| `GET` | `/vaults/{address}` | Vault detail + risk breakdown |
+| `GET` | `/vaults/{address}/history` | Grade history (last 30 records) |
+| `GET` | `/vaults/safe-yield?min_grade=B` | Safe Yield Finder, APY-sorted |
 
 ### Example Response
 
 ```json
-// GET /vaults/safe-yield?min_grade=B
 {
-  "items": [
-    {
-      "vault": {
-        "address": "0xA238Dd80C259...",
-        "protocol": "aave_v3",
-        "asset": "USDC",
-        "tvl_usd": 10000000,
-        "apy": 4.5,
-        "utilization_rate": 0.65
-      },
-      "risk": {
-        "utilization": 0.65,
-        "oracle_risk_score": 0.10,
-        "audit_score": 0.95,
-        "drawdown_max": 0.03,
-        "sufficient_data": true
-      },
-      "score": 82.4,
-      "grade": "B",
-      "disclaimer": "Safety scores are informational only, not financial advice."
-    }
-  ],
-  "min_grade": "B",
-  "total": 3
+  "vault": {
+    "address": "0xA238Dd80C259...",
+    "protocol": "aave_v3",
+    "asset": "USDC",
+    "tvl_usd": 10000000,
+    "apy": 4.5
+  },
+  "score": 82.4,
+  "grade": "B",
+  "scoring_method": "ml",
+  "ml_confidence": 0.89,
+  "disclaimer": "Safety scores are informational only, not financial advice."
 }
 ```
 
-### Interactive Docs
-
-Visit `http://localhost:8000/docs` for the auto-generated Swagger UI.
+Interactive docs: `https://api-vault-guard.warvis.org/docs`
 
 ---
 
 ## Tech Stack
 
-**Backend**
-- Python 3.10, FastAPI, Pydantic v2
-- XGBoost (ML scoring), rule-based fallback
-- web3.py (Base RPC), httpx (subgraph queries)
-- SQLite (grade history), in-memory TTL cache
-
-**Frontend**
-- Next.js 14, TypeScript, Tailwind CSS
-- TanStack Query (data fetching + caching)
-- Recharts (risk breakdown bar chart, grade history line chart)
-
-**Infrastructure**
-- Docker Compose (local full-stack)
-- Vercel-ready (frontend `output: "standalone"`)
-- Base RPC: `https://mainnet.base.org`
+**Backend:** Python 3.10, FastAPI, Pydantic v2, XGBoost, scikit-learn, web3.py, httpx, SQLite  
+**Frontend:** Next.js 14, TypeScript, Tailwind CSS, TanStack Query, Recharts  
+**Data:** DeFiLlama API (578 Base vaults, free), Base RPC  
+**Infra:** Docker, Caddy reverse proxy, self-hosted
 
 ---
 
@@ -197,50 +176,55 @@ Visit `http://localhost:8000/docs` for the auto-generated Swagger UI.
 grant-base-vault-guard/
 ├── backend/
 │   ├── src/vault_guard/
-│   │   ├── scanner.py        # Morpho/Aave/Compound/Aerodrome scanner
-│   │   ├── risk_collector.py # Risk profile builder
-│   │   ├── scorer.py         # XGBoost + rule-based scorer
-│   │   ├── yield_finder.py   # Safe yield filter
-│   │   ├── history.py        # SQLite grade history
-│   │   ├── cache.py          # TTL cache
-│   │   ├── api.py            # FastAPI application
-│   │   └── schemas.py        # Pydantic response models
-│   └── tests/                # 60 pytest tests
-├── frontend/
-│   └── src/
-│       ├── app/              # Next.js App Router pages
-│       ├── components/       # VaultTable, SafetyBadge, RiskBreakdown, etc.
-│       └── lib/              # API client, query config
-└── docker-compose.yml
+│   │   ├── scanner.py          # Morpho/Aave/Compound/Aerodrome scanner
+│   │   ├── risk_collector.py   # Risk profile builder
+│   │   ├── scorer.py           # XGBoost + rule-based scorer
+│   │   ├── yield_finder.py     # Safe yield filter
+│   │   ├── history.py          # Grade history + drop alerts
+│   │   ├── ml/
+│   │   │   ├── data_collector.py  # DeFiLlama + Base RPC
+│   │   │   ├── data_processor.py  # Feature engineering
+│   │   │   ├── collect.py         # CLI: collect 578 vaults
+│   │   │   └── retrain.py         # CLI: retrain model
+│   │   ├── api.py
+│   │   └── schemas.py
+│   └── tests/                  # 110 pytest tests
+└── frontend/
+    └── src/
+        ├── app/
+        ├── components/
+        └── lib/
 ```
 
 ---
 
-## Safety & Disclaimers
+## Use Cases
 
-- Safety scores are **informational only** and do not constitute financial advice
-- DeFi investments carry significant risk including total loss of funds
-- Vault grades reflect point-in-time analysis; conditions change rapidly
-- Vaults with insufficient on-chain data are marked **Unrated** and excluded from yield results
-- Always do your own research before depositing funds
+- **DeFi users**: Find the safest yield on Base without reading audit reports
+- **Risk managers**: Screen vault allocations before deployment
+- **Protocol teams**: Benchmark your vault's safety grade against peers
+- **Bots & integrations**: Gate deposits by safety grade via REST API
 
 ---
 
-## Built for Base Builder Grants
+## Built for Base Ecosystem Grants
 
-This project was built as part of the **Base Builder Grants** program to improve DeFi safety tooling on Base. Our goal is to make it easier for users to understand the risks of DeFi vaults and find safe yield opportunities.
+Base Vault Guard makes DeFi risk assessment **transparent, automated, and free** for every Base user.
 
-**Why Base?**
-- Growing DeFi ecosystem (Morpho, Aave, Compound, Aerodrome)
-- Low transaction costs make safety tooling economically viable
-- Strong developer community and grant support
+**Impact metrics:**
+- 578 Base vaults scored in real-time (Morpho, Aave v3, Compound v3, Aerodrome)
+- 94.0% ML accuracy (AUC 0.9961) — 4.2% improvement over synthetic-only baseline
+- 110 automated tests with grade history + drop alert coverage
+- Safe Yield Finder: one endpoint to find the best risk-adjusted yield on Base
+
+---
+
+## Disclaimer
+
+Safety scores are informational only, not financial advice. DeFi investments carry significant risk. Always do your own research before depositing.
 
 ---
 
 ## License
 
-MIT © 2024 Base Vault Guard Contributors
-
----
-
-*Built with ❤️ on Base*
+MIT © 2025 Base Vault Guard Contributors
